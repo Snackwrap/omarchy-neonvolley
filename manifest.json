@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "id": "com.leafbox.neonvolley",
+  "name": "Neon Volley",
+  "version": "0.3.0",
+  "author": "Robert (leafbox)",
+  "license": "MIT",
+  "homepage": "https://github.com/Snackwrap/omarchy-neonvolley",
+  "repository": "https://github.com/Snackwrap/omarchy-neonvolley",
+  "description": "A cyberpunk mini tennis game in the Omarchy bar: neon-on-black court, scanlines, 1P vs CPU or local 2P, and a persistent match-win scoreboard.",
+  "keywords": ["tennis", "game", "neon", "cyberpunk", "retro", "2 player", "bar", "quickshell"],
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Neon Volley",
+    "description": "Neon-grid mini tennis — vs CPU or local 2P, with a match-win tracker.",
+    "category": "Fun",
+    "aliases": ["tennis", "neon volley", "volley", "game", "neonvolley", "cyberpunk"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "sound": true,
+      "matchPoints": 7,
+      "mode": "cpu",
+      "difficulty": "normal",
+      "popupPosition": "icon",
+      "debugPreviewScene": "off",
+      "debugGeometry": false
+    },
+    "schema": [
+      {
+        "key": "sound",
+        "type": "boolean",
+        "label": "Sound effects",
+        "defaultValue": true
+      },
+      {
+        "key": "mode",
+        "type": "enum",
+        "label": "Default mode",
+        "options": [
+          { "value": "cpu", "label": "1P vs CPU" },
+          { "value": "two", "label": "2P local" }
+        ],
+        "defaultValue": "cpu"
+      },
+      {
+        "key": "difficulty",
+        "type": "enum",
+        "label": "CPU difficulty",
+        "options": [
+          { "value": "easy", "label": "Easy" },
+          { "value": "normal", "label": "Normal" },
+          { "value": "hard", "label": "Hard" }
+        ],
+        "defaultValue": "normal"
+      },
+      {
+        "key": "matchPoints",
+        "type": "integer",
+        "label": "Points to win",
+        "min": 3,
+        "max": 21,
+        "step": 1,
+        "defaultValue": 7
+      },
+      {
+        "key": "popupPosition",
+        "type": "enum",
+        "label": "Popup position",
+        "options": [
+          { "value": "icon", "label": "Under the bar icon" },
+          { "value": "center", "label": "Centered on the bar" }
+        ],
+        "defaultValue": "icon"
+      },
+      {
+        "key": "debugPreviewScene",
+        "type": "enum",
+        "label": "Debug: preview scene for screenshots",
+        "options": [
+          { "value": "off", "label": "Off" },
+          { "value": "menu", "label": "Menu attract" },
+          { "value": "play", "label": "Mid-match rally" },
+          { "value": "gameover", "label": "Game over" }
+        ],
+        "defaultValue": "off"
+      },
+      {
+        "key": "debugGeometry",
+        "type": "boolean",
+        "label": "Debug: log popup geometry for screenshots",
+        "defaultValue": false
+      }
+    ]
+  }
+}
