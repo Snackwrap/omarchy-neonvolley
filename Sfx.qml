@@ -9,20 +9,39 @@ Item {
   property int bounceCooldownMs: 60
   property int lastBounceMs: 0
 
+  readonly property string timeoutBin: "/usr/bin/timeout"
+  readonly property string paplayBin: "/usr/bin/paplay"
+  readonly property var allowedSfx: ({
+    bounce: true, gameover: true, hit: true, power: true, score: true, start: true
+  })
+
+  property int sfxStartedMs: 0
+
   function localPath(name) {
+    if (!allowedSfx[name]) return ""
     var url = Qt.resolvedUrl("assets/sfx/" + name + ".wav").toString()
     if (url.indexOf("file://") === 0) url = decodeURIComponent(url.slice(7))
     return url
   }
 
+  function stopAll() {
+    sfxProc.running = false
+    sfxStartedMs = 0
+  }
+
   function play(name) {
     if (!enabled) return
+    if (!allowedSfx[name]) return
+    var path = localPath(name)
+    if (!path) return
     if (name === "bounce") {
       var now = Date.now()
       if (now - lastBounceMs < bounceCooldownMs) return
       lastBounceMs = now
     }
-    sfxProc.command = ["paplay", "--volume=45000", localPath(name)]
+    if (sfxProc.running) sfxProc.running = false
+    sfxProc.command = [timeoutBin, "5", paplayBin, "--volume=45000", path]
+    sfxStartedMs = Date.now()
     sfxProc.running = true
   }
 
@@ -42,5 +61,18 @@ Item {
   Process {
     id: sfxProc
     running: false
+    onExited: root.sfxStartedMs = 0
   }
+
+  Timer {
+    interval: 1000
+    running: sfxProc.running
+    repeat: true
+    onTriggered: {
+      if (root.sfxStartedMs && Date.now() - root.sfxStartedMs > 6000)
+        root.stopAll()
+    }
+  }
+
+  Component.onDestruction: stopAll()
 }

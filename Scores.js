@@ -28,6 +28,17 @@ function serialize(stats) {
   return JSON.stringify(stats)
 }
 
+function isValidPayload(raw) {
+  if (typeof raw !== "string") return false
+  if (raw.length === 0 || raw.length > 4096) return false
+  try {
+    JSON.parse(raw)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
 function record(stats, mode, winner) {
   var s = parse(serialize(stats))
   if (mode === "two") {

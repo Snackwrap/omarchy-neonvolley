@@ -32,8 +32,70 @@ Panel {
   property int lastRecordedTick: -1
   property bool introActive: false
 
-  readonly property string scoresPath:
-    Quickshell.env("HOME") + "/.local/state/omarchy/plugins/com.leafbox.neonvolley/scores.json"
+  readonly property string scoresDir:
+    Quickshell.env("HOME") + "/.local/state/omarchy/plugins/com.leafbox.neonvolley"
+  readonly property string scoresPath: scoresDir + "/scores.json"
+
+  // Score file is small and plugin-owned, but the path is still attacker-writable
+  // in the same UID. FileView watches only; reads and writes go through bounded
+  // perl helpers that open with O_NOFOLLOW, validate ownership/mode, and cap size.
+  readonly property string safeReadScript:
+    "use strict; use Fcntl qw(:DEFAULT :mode);" +
+    "sysopen(my $fh, $ARGV[0], O_RDONLY | O_NOFOLLOW | O_NONBLOCK) or exit 1;" +
+    "my @s = stat($fh) or exit 1;" +
+    "exit 1 unless S_ISREG($s[2]);" +
+    "exit 1 unless $s[4] == $<;" +
+    "exit 1 if $s[3] > 1;" +
+    "exit 1 if $s[7] > 4096;" +
+    "exit 1 if ($s[2] & 0022);" +
+    "my $buf = \"\"; sysread($fh, $buf, 4096); print $buf;"
+
+  readonly property string safeWriteScript:
+    "use strict; use Fcntl qw(:DEFAULT :mode);" +
+    "my ($target, $payload) = @ARGV;" +
+    "my $home = $ENV{HOME} or exit 1;" +
+    "$home =~ s|/+$||;" +
+    "my $root = \"$home/.local/state/omarchy/plugins/com.leafbox.neonvolley\";" +
+    "exit 1 unless defined $target && $target eq \"$root/scores.json\";" +
+    "exit 1 unless defined $payload;" +
+    "exit 1 if length($payload) > 4096;" +
+    "my $path = $home;" +
+    "for my $part ('.local', 'state', 'omarchy', 'plugins', 'com.leafbox.neonvolley') {" +
+    "  $path = \"$path/$part\";" +
+    "  if (-e $path) {" +
+    "    my @d = stat($path) or exit 1;" +
+    "    exit 1 unless -d _;" +
+    "    exit 1 unless $d[4] == $<;" +
+    "    exit 1 if ($d[2] & 0022);" +
+    "  } else { mkdir $path, 0700 or exit 1; }" +
+    "}" +
+    "my $tmp = \"$root/.scores.json.tmp.$$\";" +
+    "sysopen(my $fh, $tmp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600) or exit 1;" +
+    "print $fh $payload or exit 1;" +
+    "close($fh) or exit 1;" +
+    "rename($tmp, $target) or do { unlink $tmp; exit 1; };" +
+    "chmod 0600, $target;"
+
+  readonly property string perlBin: "/usr/bin/perl"
+  readonly property string timeoutBin: "/usr/bin/timeout"
+
+  property int scoresReadStartedMs: 0
+  property int scoresSaveStartedMs: 0
+
+  function saveScores(payload) {
+    if (!Scores.isValidPayload(payload)) return
+    if (scoresSaveProc.running) scoresSaveProc.running = false
+    scoresSaveProc.payload = payload
+    scoresSaveStartedMs = Date.now()
+    scoresSaveProc.running = true
+  }
+
+  function stopScoreProcs() {
+    scoresReader.running = false
+    scoresSaveProc.running = false
+    scoresReadStartedMs = 0
+    scoresSaveStartedMs = 0
+  }
 
   function boolSetting(name, dflt) {
     var v = setting(name, dflt)
@@ -122,8 +184,7 @@ Panel {
 
   function resetScores() {
     sessionStats = Scores.reset(sessionStats)
-    scoresSaveProc.payload = Scores.serialize(sessionStats)
-    scoresSaveProc.running = true
+    saveScores(Scores.serialize(sessionStats))
   }
 
   readonly property string gameOverWinnerLabel: {
@@ -168,38 +229,35 @@ Panel {
     sessionStats = Scores.record(sessionStats, playMode, gameState.winner)
     lastRecordedWinner = gameState.winner
     lastRecordedTick = tick
-    scoresSaveProc.payload = Scores.serialize(sessionStats)
-    scoresSaveProc.running = true
+    saveScores(Scores.serialize(sessionStats))
   }
 
-  Component.onCompleted: {
-    scoresDirProc.running = true
-    scoresReader.running = true
-  }
-
-  Process {
-    id: scoresDirProc
-    running: false
-    command: ["mkdir", "-p", Quickshell.env("HOME") + "/.local/state/omarchy/plugins/com.leafbox.neonvolley"]
+  Component.onCompleted: scoresReadTimer.restart()
+  Component.onDestruction: {
+    stopScoreProcs()
+    if (sfxLoader.item && sfxLoader.item.stopAll) sfxLoader.item.stopAll()
   }
 
   Process {
     id: scoresSaveProc
     property string payload: ""
     running: false
-    command: ["bash", "-c",
-      "mkdir -p \"$(dirname \"$1\")\" && printf '%s\\n' \"$2\" > \"$1\"",
-      "--", root.scoresPath, payload]
+    command: [root.timeoutBin, "3", root.perlBin, "-e", root.safeWriteScript,
+              root.scoresPath, payload]
+    onExited: root.scoresSaveStartedMs = 0
   }
 
   Process {
     id: scoresReader
     running: false
-    command: ["timeout", "1", "cat", "--", root.scoresPath]
+    command: [root.timeoutBin, "2", root.perlBin, "-e", root.safeReadScript, root.scoresPath]
+    onExited: root.scoresReadStartedMs = 0
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.sessionStats = Scores.parse(String(text || ""))
+        var raw = String(text || "")
+        if (raw.length === 0 || raw.length > 4096) return
+        root.sessionStats = Scores.parse(raw)
       }
     }
   }
@@ -215,7 +273,26 @@ Panel {
   Timer {
     id: scoresReadTimer
     interval: 250
-    onTriggered: scoresReader.running = true
+    onTriggered: {
+      if (scoresReader.running) return
+      scoresReadStartedMs = Date.now()
+      scoresReader.running = true
+    }
+  }
+
+  Timer {
+    interval: 1000
+    running: scoresReader.running || scoresSaveProc.running
+    repeat: true
+    onTriggered: {
+      var now = Date.now()
+      if (scoresReader.running && scoresReadStartedMs
+          && now - scoresReadStartedMs > 4000)
+        scoresReader.running = false
+      if (scoresSaveProc.running && scoresSaveStartedMs
+          && now - scoresSaveStartedMs > 5000)
+        scoresSaveProc.running = false
+    }
   }
 
   onPhaseChanged: {
@@ -259,10 +336,16 @@ Panel {
     holdRight = false
     holdTopLeft = false
     holdTopRight = false
-    scoresReader.running = true
     applyPreviewScene()
+    scoresReadTimer.restart()
     Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
     if (debugGeometry) geometryTimer.restart()
+  }
+
+  Timer {
+    interval: 1500
+    running: true
+    onTriggered: scoresReadTimer.restart()
   }
 
   Timer {
