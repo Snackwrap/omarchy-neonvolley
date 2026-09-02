@@ -57,13 +57,6 @@ omarchy restart shell
 
 Reload the shell after each edit — `rescanPlugins` alone will not pick up changed QML.
 
-To regenerate the marketplace card:
-
-```bash
-./tools/capture-preview.sh    # needs a running Hyprland session + the plugin enabled
-./tools/build-preview.sh      # composes preview.png from assets/tabs/
-```
-
 ## Settings
 
 Omarchy does not yet expose a settings UI for bar widgets — configure via the CLI, then restart the shell:
@@ -105,3 +98,5 @@ omarchy restart shell
 ## License
 
 MIT
+
+`tools/capture-preview.sh` and `tools/build-preview.sh` regenerate `preview.png` for listing updates.
