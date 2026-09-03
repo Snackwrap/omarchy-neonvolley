@@ -9,7 +9,6 @@ Item {
   property int bounceCooldownMs: 60
   property int lastBounceMs: 0
 
-  readonly property string timeoutBin: "/usr/bin/timeout"
   readonly property string paplayBin: "/usr/bin/paplay"
   readonly property var allowedSfx: ({
     bounce: true, gameover: true, hit: true, power: true, score: true, start: true
@@ -40,7 +39,7 @@ Item {
       lastBounceMs = now
     }
     if (sfxProc.running) sfxProc.running = false
-    sfxProc.command = [timeoutBin, "5", paplayBin, "--volume=45000", path]
+    sfxProc.command = [paplayBin, "--volume=45000", path]
     sfxStartedMs = Date.now()
     sfxProc.running = true
   }
@@ -69,7 +68,7 @@ Item {
     running: sfxProc.running
     repeat: true
     onTriggered: {
-      if (root.sfxStartedMs && Date.now() - root.sfxStartedMs > 6000)
+      if (root.sfxStartedMs && Date.now() - root.sfxStartedMs > 5000)
         root.stopAll()
     }
   }
